@@ -103,9 +103,18 @@ export function initLocalDb(): void {
     db = raw ? (JSON.parse(raw) as Shape) : seed();
   } catch { db = seed(); }
   if (!db!.users) db = seed();
-  if (!pwMap()['dev@local']) savePw({
-    'dev@local': { hash: 'e1c6aed02ce2c79f6b761533a6b501e29d5bc16cd9f187df8f5f6924413de223' },
-    'staff@local': { hash: '02defbfb8190f9d0719ef7a23da2049bd2e61442bc14021a6d8a4ae35ca334b7' },
-  });
+  // idempotent seeds/migrations — safe for browsers that already visited with an older build
+  const now = Date.now();
+  if (!db!.users['manager-0001']) {
+    db!.users['manager-0001'] = {
+      id: 'manager-0001', uid: 'manager-0001', name: 'Manager Demo', email: 'manager@local',
+      role: 'manager', permOverrides: {}, active: true, createdAt: now, createdBy: 'seed', lastActiveAt: now,
+    };
+  }
+  const m = pwMap(); let changed = false;
+  if (!m['dev@local']) { m['dev@local'] = { hash: 'e1c6aed02ce2c79f6b761533a6b501e29d5bc16cd9f187df8f5f6924413de223' }; changed = true; }
+  if (!m['staff@local']) { m['staff@local'] = { hash: '02defbfb8190f9d0719ef7a23da2049bd2e61442bc14021a6d8a4ae35ca334b7' }; changed = true; }
+  if (!m['manager@local']) { m['manager@local'] = { hash: '866485796cfa8d7c0cf7111640205b83076433547577511d81f8030ae99ecea5' }; changed = true; }
+  if (changed) savePw(m);
   persist();
 }

@@ -23,6 +23,7 @@ export function POS() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [checkoutKey, setCheckoutKey] = useState(newCheckoutKey());
   const [busy, setBusy] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [printSale, setPrintSale] = useState<Sale | null>(null);
   const [upiFlow, setUpiFlow] = useState<{ saleId: string; total: number; qr: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -73,6 +74,7 @@ export function POS() {
       toast('ok', `Bill saved — ${inr(totalsNow.total)} (cash)`);
       setPrintSale({ id: key, billNo: '', items: totalsNow.items, subtotal: totalsNow.subtotal, discount: totalsNow.discount, discountPct: totalsNow.discountPct, taxRate: totalsNow.taxRate, tax: totalsNow.tax, total: totalsNow.total, profit: totalsNow.profit, paymentMethod: 'cash', paymentStatus: 'success', cashierId: profile.uid, cashierName: profile.name, createdAt: Date.now(), paidAt: Date.now(), verifiedBy: profile.name, verifiedAt: Date.now(), failReason: null, refunded: false, refundedAt: null, refundedBy: null, refundNote: null, stockDeducted: true, stockRestored: false });
       clearCart(true);
+      setCartOpen(false);
       if (cart.some((l) => lowIds.has(l.product.id))) toast('info', 'Some items are now low on stock — check Inventory.');
     } catch (err) {
       toast('err', (err as Error).message === 'DUPLICATE_SALE' ? 'This bill was already saved (duplicate prevented).' : (err as Error).message);
@@ -140,8 +142,11 @@ export function POS() {
         </div>
       </section>
 
-      <section className="pos-right card">
-        <h3 className="cart-title">Current bill</h3>
+      <section className={`pos-right card ${cartOpen ? 'cart-open' : ''}`}>
+        <h3 className="cart-title">
+          Current bill
+          <button className="btn btn-ghost btn-mini cart-close" onClick={() => setCartOpen(false)}>✕ Close</button>
+        </h3>
         <div className="cart-lines">
           {cart.map((l) => (
             <div key={l.product.id} className="cline">
@@ -199,6 +204,12 @@ export function POS() {
         )}
         {cart.length > 0 && <button className="btn btn-ghost btn-block" onClick={() => clearCart(false)}>Clear bill</button>}
       </section>
+
+      {/* mobile cart FAB + scrim */}
+      {cartOpen && <div className="cart-scrim" onClick={() => setCartOpen(false)} />}
+      <button className="cart-fab" onClick={() => setCartOpen(true)} aria-label="Open cart">
+        🧾 <b>{cart.reduce((n, l) => n + l.qty, 0)}</b> · {inr(totals.total)} →
+      </button>
 
       {upiFlow && (
         <Modal title="Waiting for UPI payment" onClose={() => undefined} wide>

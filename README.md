@@ -27,8 +27,9 @@ device syncs in real time; no business data lives in browser storage.
 **Local mode (zero setup):** with no `.env` present, the app boots in local
 mode — all features work (billing, inventory, payments flow, users, reports,
 Excel, printing, backup JSON), data persists in this browser's localStorage.
-Seeded logins: `dev@local` / `devpass123` (developer) and `staff@local` /
-`staff1234` (cashier), plus sample products. Ideal for trying everything out.
+Seeded logins: `dev@local` / `devpass123` (developer), `manager@local` /
+`manager123` (manager) and `staff@local` / `staff1234` (cashier), plus sample
+products. Ideal for trying everything out.
 
 **Cloud mode (multi-device, recommended for real use):** the moment
 `VITE_FIREBASE_*` keys exist in `.env`, the app runs against Firebase
