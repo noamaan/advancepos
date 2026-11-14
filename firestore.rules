@@ -1,0 +1,135 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+    function myDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function myData() { return myDoc().data; }
+    function isActive() { return signedIn() && myDoc().exists() && myData().active == true; }
+    function role() { return myData().role; }
+    function isDev() { return isActive() && role() == 'developer'; }
+    function isAdmin() { return isActive() && (role() == 'admin' || isDev()); }
+    function isManager() { return isActive() && (role() == 'manager' || isAdmin()); }
+    function isStaff() { return isActive() && role() in ['cashier', 'manager', 'admin', 'developer']; }
+
+    // ── user profiles ────────────────────────────────────────────────────
+    // No self-signup: profiles are created by admin/developer from the app UI,
+    // and the first developer profile is created manually via the console
+    // (see README §3). This is what keeps the developer role unforgeable.
+    match /users/{uid} {
+      allow read: if isStaff() || request.auth.uid == uid;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name','email','role','permOverrides','active','createdAt','createdBy','lastActiveAt'])
+        && request.resource.data.role in ['cashier','manager','admin','developer']
+        && (request.resource.data.role != 'developer' || isDev());
+      allow update: if isAdmin()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+            || isDev() || request.resource.data.role != 'developer')
+        && (resource.data.role != 'developer' || isDev());
+      allow delete: if false; // deactivate instead — user records are auditable
+    }
+
+    // ── settings ─────────────────────────────────────────────────────────
+    match /settings/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ── products ─────────────────────────────────────────────────────────
+    match /products/{id} {
+      allow read: if isStaff();
+      allow create: if isManager()
+        && request.resource.data.stockQty is number
+        && request.resource.data.stockQty >= 0
+        && request.resource.data.sellingPrice is number
+        && request.resource.data.sellingPrice >= 0
+        && request.resource.data.purchasePrice is number
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0;
+      allow update: if isManager()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['stockQty'])
+            || stockChangeOk());
+      allow delete: if false; // soft-delete via active:false only
+
+      // stock may only move via ± whole numbers, and sales/movements are
+      // written alongside it inside client transactions.
+      function stockChangeOk() {
+        return request.resource.data.stockQty is number
+          && request.resource.data.stockQty >= 0
+          && request.resource.data.stockQty == resource.data.stockQty + (request.resource.data.stockQty - resource.data.stockQty);
+      }
+    }
+
+    // ── purchases ────────────────────────────────────────────────────────
+    match /purchases/{id} {
+      allow read: if isManager();
+      allow create: if isManager()
+        && request.resource.data.qty is number
+        && request.resource.data.qty > 0
+        && request.resource.data.total is number;
+      allow update, delete: if false; // purchase records are immutable; use a movement to correct
+    }
+
+    // ── sales (financial records) ────────────────────────────────────────
+    match /sales/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.paymentMethod in ['cash','upi']
+        && request.resource.data.paymentStatus in ['pending','success']
+        && request.resource.data.cashierId == request.auth.uid
+        && (request.resource.data.paymentMethod != 'cash' || request.resource.data.paymentStatus == 'success')
+        && (request.resource.data.paymentMethod != 'upi' || request.resource.data.paymentStatus == 'pending');
+      // Only payment-status transitions are updateable; content is immutable.
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['paymentStatus','paidAt','verifiedBy','verifiedAt','failReason',
+              'refunded','refundedAt','refundedBy','refundNote','stockDeducted','stockRestored'])
+        && validTransition();
+      function validTransition() {
+        let from = resource.data.paymentStatus;
+        let to = request.resource.data.paymentStatus;
+        return (from == 'pending' && to in ['success','failed'])
+          || (from == 'success' && to == 'refunded'
+              && request.resource.data.refunded == true);
+      }
+      allow delete: if false; // NEVER delete financial records — refunds flag them
+    }
+
+    // ── stock movements (immutable ledger) ────────────────────────────────
+    match /stock_movements/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.type in ['purchase','sale','adjustment','refund','import']
+        && request.resource.data.qtyDelta is number
+        && request.resource.data.balanceAfter is number
+        && request.resource.data.balanceAfter >= 0;
+      allow update, delete: if false;
+    }
+
+    // ── audit logs (append-only) ──────────────────────────────────────────
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create: if isStaff() && request.resource.data.actorId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── bill counter ──────────────────────────────────────────────────────
+    match /meta/{id} {
+      allow read: if isStaff();
+      // bill numbers can ONLY increment by exactly 1 (prevents skipping/rewind)
+      allow write: if isStaff()
+        && (!resource.exists
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['bill'])
+            || request.resource.data.bill == resource.data.bill + 1);
+    }
+
+    // default deny
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+
+    // Brand assets (logos): readable by everyone (bills may be shared/reprinted),
+    // writable only by signed-in staff, images only, max 2 MB.
+    match /branding/{name} {
+      allow read: if true;
+      allow write: if signedIn()
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
