@@ -103,6 +103,9 @@ export function initLocalDb(): void {
     db = raw ? (JSON.parse(raw) as Shape) : seed();
   } catch { db = seed(); }
   if (!db!.users) db = seed();
-  if (!pwMap()['dev@local']) savePw({ 'dev@local': { plain: 'devpass123' }, 'staff@local': { plain: 'staff1234' } });
+  if (!pwMap()['dev@local']) savePw({
+    'dev@local': { hash: 'e1c6aed02ce2c79f6b761533a6b501e29d5bc16cd9f187df8f5f6924413de223' },
+    'staff@local': { hash: '02defbfb8190f9d0719ef7a23da2049bd2e61442bc14021a6d8a4ae35ca334b7' },
+  });
   persist();
 }
