@@ -22,7 +22,22 @@ device syncs in real time; no business data lives in browser storage.
 | Settings | `src/pages/Settings.tsx` | shop identity, logo (Storage), UPI, tax, invoice prefix, paper size, categories, thresholds, password change, backup/restore, audit viewer |
 | Services | `src/services/` | every money/stock mutation is an atomic Firestore transaction with an audit entry |
 
-## 2. Environment setup (required — 10 minutes)
+## 2. Two ways to run
+
+**Local mode (zero setup):** with no `.env` present, the app boots in local
+mode — all features work (billing, inventory, payments flow, users, reports,
+Excel, printing, backup JSON), data persists in this browser's localStorage.
+Seeded logins: `dev@local` / `devpass123` (developer) and `staff@local` /
+`staff1234` (cashier), plus sample products. Ideal for trying everything out.
+
+**Cloud mode (multi-device, recommended for real use):** the moment
+`VITE_FIREBASE_*` keys exist in `.env`, the app runs against Firebase
+(Firestore live sync, Auth, Storage, security rules). Local-mode data does not
+migrate automatically — export it via Settings → Download backup (JSON) before
+switching, then restore it after signing in to Firebase mode (user accounts are
+re-created via the Users panel; products/settings/movements restore as-is).
+
+## 2a. Environment setup (required for cloud mode — 10 minutes)
 
 No credentials are committed. Create `.env` from `.env.example` with your
 Firebase web-app config:

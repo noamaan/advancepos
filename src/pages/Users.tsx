@@ -2,16 +2,16 @@ import { useState } from 'react';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { Badge, ConfirmDialog, Field, Modal, useToast } from '../components/ui';
-import { createUser, sendReset, setUserActive, updateUser } from '../services/users';
+import { createUser, localAdminSetPassword, sendReset, setUserActive, updateUser } from '../services/users';
+import { firebaseReady } from '../lib/firebase';
 import { ALL_PERM_KEYS, effectivePerms, PERMS, ROLE_DEFAULTS, type PermKey } from '../lib/permissions';
 import { fmtDateTime } from '../lib/format';
 import type { Role, UserProfile } from '../types';
-import { orderBy } from 'firebase/firestore';
 
 export function Users() {
   const { profile, can, isDeveloper } = useAuth();
   const toast = useToast();
-  const [users] = useCollection<UserProfile>('users', [orderBy('createdAt', 'asc')]);
+  const [users] = useCollection<UserProfile>('users', { order: [{ field: 'createdAt', dir: 'asc' }] });
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -66,7 +66,14 @@ export function Users() {
                 <td className="muted small">{u.lastActiveAt ? fmtDateTime(u.lastActiveAt) : '—'}</td>
                 <td className="row-end">
                   {can('usersManage') && <button className="btn btn-mini" onClick={() => setEdit(u)}>Permissions</button>}
-                  {can('usersManage') && <button className="btn btn-mini" onClick={() => { void sendReset(u.email).then(() => toast('ok', `Password-reset email sent to ${u.email}`)).catch((e) => toast('err', (e as Error).message)); }}>Reset password</button>}
+                  {can('usersManage') && <button className="btn btn-mini" onClick={() => {
+                    if (!firebaseReady) {
+                      const pw = window.prompt(`New password for ${u.email} (min 8 chars)`);
+                      if (pw) localAdminSetPassword(u.email, pw).then(() => toast('ok', 'Password updated')).catch((e) => toast('err', (e as Error).message));
+                      return;
+                    }
+                    void sendReset(u.email).then(() => toast('ok', `Password-reset email sent to ${u.email}`)).catch((e) => toast('err', (e as Error).message));
+                  }}>{firebaseReady ? 'Reset password' : 'Set password'}</button>}
                   {can('usersDelete') && u.uid !== profile?.uid && (
                     <button className="btn btn-mini btn-danger-ghost" onClick={() => setDeact(u)}>{u.active ? 'Deactivate' : 'Reactivate'}</button>
                   )}

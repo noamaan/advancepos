@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, emailIsDeveloperCandidate } from '../store/auth';
+import { firebaseReady } from '../lib/firebase';
 import { useToast } from '../components/ui';
 
 export function Login() {
@@ -46,6 +47,13 @@ export function Login() {
         <input className="input" type="password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} required autoComplete={devMode ? 'off' : 'current-password'} />
         {hint && <div className="login-hint">{hint}</div>}
         <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        {!firebaseReady && (
+          <div className="login-note">
+            <b>Local mode</b> (Firebase not configured yet) — sample logins:<br />
+            Developer: <code>dev@local</code> / <code>devpass123</code><br />
+            Cashier: <code>staff@local</code> / <code>staff1234</code>
+          </div>
+        )}
         <div className="login-links">
           {devMode
             ? <button type="button" className="linklike" onClick={() => nav('/login')}>← staff sign-in</button>

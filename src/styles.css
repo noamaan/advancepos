@@ -179,6 +179,9 @@ h1,h2,h3,h4 { margin: .2em 0; }
 .login-card { width: 380px; max-width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px; display: grid; gap: 12px; box-shadow: var(--shadow); }
 .login-brand { font-size: 1.5rem; font-weight: 800; } .login-sub { color: var(--muted); margin-top: -8px; }
 .login-hint { color: var(--bad); font-size: .84rem; }
+.login-note { background: color-mix(in srgb, var(--accent2) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent2) 35%, transparent); border-radius: 10px; padding: 10px 12px; font-size: .8rem; color: var(--muted); }
+.login-note code { color: var(--accent2); }
+.mode-banner { background: color-mix(in srgb, var(--warn) 12%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); color: var(--text); font-size: .82rem; padding: 7px 18px; }
 .login-links { display: flex; justify-content: center; }
 .linklike { background: none; border: none; cursor: pointer; color: var(--muted); }
 .subtle-link { font-size: 18px; opacity: .4; letter-spacing: 2px; }

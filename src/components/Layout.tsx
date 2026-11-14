@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { useSettings } from '../store/settings';
 import { useToast } from './ui';
+import { firebaseReady } from '../lib/firebase';
 import type { PermKey } from '../lib/permissions';
 
 interface NavDef { to: string; icon: string; label: string; perm: PermKey; badge?: number }
@@ -83,6 +84,11 @@ export function Layout({ lowStockCount }: { lowStockCount: number }) {
           <div className="topbar-title">{settings.bizName}</div>
           <div className="topbar-user">{profile?.name} · <b>{profile?.role}</b></div>
         </header>
+        {!firebaseReady && (
+          <div className="mode-banner">
+            ⚠️ <b>Local mode</b> — no Firebase keys configured yet, so data stays in <i>this</i> browser only (no multi-device sync). Everything else works fully. Add your Firebase config anytime to switch to cloud mode automatically.
+          </div>
+        )}
         <div className="page"><Outlet /></div>
       </main>
     </div>

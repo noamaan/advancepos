@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { orderBy } from 'firebase/firestore';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
@@ -21,9 +20,9 @@ const COLORS = ['#f5b942', '#38bdf8', '#a78bfa', '#34d399', '#f87171', '#fbbf24'
 export function Reports() {
   const { can } = useAuth();
   const { settings } = useSettings();
-  const [sales] = useCollection<Sale>('sales', [orderBy('createdAt', 'desc')]);
+  const [sales] = useCollection<Sale>('sales', { order: [{ field: 'createdAt', dir: 'desc' }] });
   const [products] = useCollection<Product>('products');
-  const [purchases] = useCollection<Purchase>('purchases', [orderBy('createdAt', 'desc')]);
+  const [purchases] = useCollection<Purchase>('purchases', { order: [{ field: 'createdAt', dir: 'desc' }] });
 
   const today = dateKey(Date.now());
   const thisMonth = monthKey(Date.now());

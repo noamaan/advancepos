@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { orderBy, where } from 'firebase/firestore';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { Field, Modal, useToast } from '../components/ui';
@@ -12,7 +11,7 @@ export function Purchases() {
   const { profile, can } = useAuth();
   const toast = useToast();
   const [products] = useCollection<Product>('products');
-  const [purchases] = useCollection<Purchase>('purchases', [orderBy('createdAt', 'desc')]);
+  const [purchases] = useCollection<Purchase>('purchases', { order: [{ field: 'createdAt', dir: 'desc' }] });
 
   const [open, setOpen] = useState(false);
   const [pid, setPid] = useState('');

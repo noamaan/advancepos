@@ -1,13 +1,10 @@
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useMemo, type ReactNode } from 'react';
-import { where } from 'firebase/firestore';
-import { firebaseReady } from './lib/firebase';
 import { AuthProvider, useAuth } from './store/auth';
 import { SettingsProvider, useSettings } from './store/settings';
 import { ToastProvider, Spinner } from './components/ui';
 import { Layout } from './components/Layout';
 import { useCollection } from './hooks/fs';
-import { Setup } from './pages/Setup';
 import { Login } from './pages/Login';
 import { POS } from './pages/POS';
 import { Inventory } from './pages/Inventory';
@@ -53,7 +50,7 @@ function RequirePerm({ perm, children }: { perm: PermKey; children: ReactNode })
 }
 
 function Shell() {
-  const [products] = useCollection<Product>('products', [where('active', '==', true)]);
+  const [products] = useCollection<Product>('products', { where: [{ field: 'active', op: '==', value: true }] });
   const { settings } = useSettings();
   const lowCount = useMemo(
     () => products.filter((p) => p.active !== false && p.stockQty <= (p.lowStockThreshold ?? settings.lowStockDefault)).length,
@@ -63,7 +60,6 @@ function Shell() {
 }
 
 export default function App() {
-  if (!firebaseReady) return <Setup />;
   return (
     <ToastProvider>
       <AuthProvider>

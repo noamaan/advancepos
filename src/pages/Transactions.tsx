@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { orderBy } from 'firebase/firestore';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { useSettings } from '../store/settings';
@@ -18,7 +17,7 @@ export function Transactions() {
   const { profile, can } = useAuth();
   const { settings } = useSettings();
   const toast = useToast();
-  const [sales] = useCollection<Sale>('sales', [orderBy('createdAt', 'desc')]);
+  const [sales] = useCollection<Sale>('sales', { order: [{ field: 'createdAt', dir: 'desc' }] });
 
   const [from, setFrom] = useState(dateKey(Date.now()));
   const [to, setTo] = useState(dateKey(Date.now()));

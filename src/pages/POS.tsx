@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { where, orderBy } from 'firebase/firestore';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { useSettings } from '../store/settings';
@@ -15,8 +14,8 @@ export function POS() {
   const { settings } = useSettings();
   const toast = useToast();
 
-  const [products] = useCollection<Product>('products', [where('active', '==', true)]);
-  const [pendingSales] = useCollection<Sale>('sales', [where('paymentStatus', '==', 'pending'), orderBy('createdAt', 'desc')]);
+  const [products] = useCollection<Product>('products', { where: [{ field: 'active', op: '==', value: true }] });
+  const [pendingSales] = useCollection<Sale>('sales', { where: [{ field: 'paymentStatus', op: '==', value: 'pending' }], order: [{ field: 'createdAt', dir: 'desc' }] });
 
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');

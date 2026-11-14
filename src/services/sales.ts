@@ -1,8 +1,9 @@
 import { collection, doc, runTransaction, type Transaction } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, firebaseReady } from '../lib/firebase';
+import * as L from '../store/localdb';
 import { round2, uid } from '../lib/format';
 import type { CartLine, Product, Sale, SaleItem, UserProfile, PaymentMethod } from '../types';
-import { auditTx } from './audit';
+import { audit, auditTx } from './audit';
 
 const saleRef = (id: string) => doc(db, 'sales', id);
 const prodRef = (id: string) => doc(db, 'products', id);
@@ -87,6 +88,37 @@ async function commitSaleWithStock(t: Transaction, sale: Sale): Promise<void> {
 /** Idempotent client-side key for one checkout attempt (stable across retries / double clicks). */
 export function newCheckoutKey(): string { return uid(); }
 
+// ── local-mode implementations ─────────────────────────────────────────────
+function localBill(prefix: string): string {
+  const c = L.get<{ bill: number } & { id: string }>('meta', 'counters');
+  const n = (c?.bill ?? 0) + 1;
+  L.put('meta', { id: 'counters', bill: n });
+  return `${prefix}${String(n).padStart(5, '0')}`;
+}
+function localCheckStock(items: SaleItem[]): void {
+  for (const item of items) {
+    const p = L.get<Product & { id: string }>('products', item.productId);
+    if (!p) throw new Error(`"${item.name}" no longer exists`);
+    if (!p.active) throw new Error(`"${p.name}" is deactivated`);
+    if (p.stockQty < item.qty)
+      throw new Error(`Insufficient stock for "${p.name}" — have ${p.stockQty}, need ${item.qty}`);
+  }
+}
+function localDeduct(sale: Sale): void {
+  const now = Date.now();
+  localCheckStock(sale.items);
+  for (const item of sale.items) {
+    const p = L.get<Product & { id: string }>('products', item.productId)!;
+    const after = p.stockQty - item.qty;
+    L.put('products', { ...p, stockQty: after, updatedAt: now, updatedBy: sale.cashierName } as unknown as L.Row);
+    L.put('stock_movements', {
+      id: uid(), productId: p.id, productName: p.name, type: 'sale',
+      qtyDelta: -item.qty, balanceAfter: after, refId: sale.id,
+      note: `Sale ${sale.billNo}`, createdAt: now, createdBy: sale.cashierName,
+    });
+  }
+}
+
 /**
  * CASH checkout: money is (reliably) already in hand, so the sale is created as
  * 'success' AND stock is deducted in ONE atomic transaction.
@@ -96,6 +128,26 @@ export async function checkoutCash(
   actor: UserProfile, invoicePrefix: string,
 ): Promise<string> {
   if (lines.length === 0) throw new Error('Cart is empty');
+  if (!firebaseReady) {
+    L.initLocalDb();
+    if (L.get('sales', checkoutKey)) throw new Error('DUPLICATE_SALE');
+    const now = Date.now();
+    const sale: Sale = {
+      id: checkoutKey, billNo: localBill(invoicePrefix), items: totals.items,
+      subtotal: totals.subtotal, discount: totals.discount, discountPct: totals.discountPct,
+      taxRate: totals.taxRate, tax: totals.tax, total: totals.total, profit: totals.profit,
+      paymentMethod: 'cash', paymentStatus: 'success',
+      cashierId: actor.uid, cashierName: actor.name,
+      createdAt: now, paidAt: now, verifiedBy: actor.name, verifiedAt: now,
+      failReason: null, refunded: false, refundedAt: null, refundedBy: null, refundNote: null,
+      stockDeducted: false, stockRestored: false,
+    };
+    localDeduct(sale);
+    sale.stockDeducted = true;
+    L.put('sales', sale as unknown as L.Row);
+    await audit(actor, 'sale.create', 'sales', checkoutKey, `Cash sale ${sale.billNo} — ₹${totals.total}`);
+    return checkoutKey;
+  }
   await runTransaction(db, async (t) => {
     const existing = await t.get(saleRef(checkoutKey));
     if (existing.exists()) throw new Error('DUPLICATE_SALE');
@@ -127,6 +179,23 @@ export async function checkoutUpiPending(
   actor: UserProfile, invoicePrefix: string,
 ): Promise<string> {
   if (lines.length === 0) throw new Error('Cart is empty');
+  if (!firebaseReady) {
+    L.initLocalDb();
+    if (L.get('sales', checkoutKey)) throw new Error('DUPLICATE_SALE');
+    const sale: Sale = {
+      id: checkoutKey, billNo: localBill(invoicePrefix), items: totals.items,
+      subtotal: totals.subtotal, discount: totals.discount, discountPct: totals.discountPct,
+      taxRate: totals.taxRate, tax: totals.tax, total: totals.total, profit: totals.profit,
+      paymentMethod: 'upi', paymentStatus: 'pending',
+      cashierId: actor.uid, cashierName: actor.name,
+      createdAt: Date.now(), paidAt: null, verifiedBy: null, verifiedAt: null,
+      failReason: null, refunded: false, refundedAt: null, refundedBy: null, refundNote: null,
+      stockDeducted: false, stockRestored: false,
+    };
+    L.put('sales', sale as unknown as L.Row);
+    await audit(actor, 'sale.pending', 'sales', checkoutKey, `UPI sale ${sale.billNo} awaiting payment — ₹${totals.total}`);
+    return checkoutKey;
+  }
   await runTransaction(db, async (t) => {
     const existing = await t.get(saleRef(checkoutKey));
     if (existing.exists()) throw new Error('DUPLICATE_SALE');
@@ -153,6 +222,24 @@ export async function checkoutUpiPending(
  * fulfilled, the sale is auto-failed and NO money/stock state changes silently.
  */
 export async function confirmUpiPaid(saleId: string, verifier: UserProfile): Promise<void> {
+  if (!firebaseReady) {
+    L.initLocalDb();
+    const sale = L.get<Sale & { id: string }>('sales', saleId);
+    if (!sale) throw new Error('Sale not found');
+    if (sale.paymentMethod !== 'upi') throw new Error('Not a UPI sale');
+    if (sale.paymentStatus !== 'pending') throw new Error(`Already ${sale.paymentStatus} — cannot verify twice`);
+    const now = Date.now();
+    try {
+      localDeduct(sale);
+      L.put('sales', { ...sale, paymentStatus: 'success', paidAt: now, verifiedBy: verifier.name, verifiedAt: now, stockDeducted: true } as unknown as L.Row);
+      await audit(verifier, 'sale.verify', 'sales', saleId, `UPI payment verified for ${sale.billNo} — ₹${sale.total}`);
+    } catch (err) {
+      L.put('sales', { ...sale, paymentStatus: 'failed', failReason: `Could not fulfil at verification: ${(err as Error).message}` } as unknown as L.Row);
+      await audit(verifier, 'sale.verify_failed', 'sales', saleId, `UPI verification FAILED for ${sale.billNo}: ${(err as Error).message}`);
+      throw new Error(`Payment NOT captured: ${(err as Error).message}. Sale marked as failed.`);
+    }
+    return;
+  }
   await runTransaction(db, async (t) => {
     const snap = await t.get(saleRef(saleId));
     if (!snap.exists()) throw new Error('Sale not found');
@@ -192,6 +279,15 @@ export async function confirmUpiPaid(saleId: string, verifier: UserProfile): Pro
 
 /** UPI step-2 alt: mark a pending UPI payment as failed / not received. Stock untouched. */
 export async function markUpiFailed(saleId: string, reason: string, actor: UserProfile): Promise<void> {
+  if (!firebaseReady) {
+    L.initLocalDb();
+    const sale = L.get<Sale & { id: string }>('sales', saleId);
+    if (!sale) throw new Error('Sale not found');
+    if (sale.paymentStatus !== 'pending') throw new Error(`Sale is already ${sale.paymentStatus}`);
+    L.put('sales', { ...sale, paymentStatus: 'failed', failReason: reason || 'Payment not received' } as unknown as L.Row);
+    await audit(actor, 'sale.failed', 'sales', saleId, `UPI ${reason?.toLowerCase() || 'payment failed'} — ${sale.billNo}`);
+    return;
+  }
   await runTransaction(db, async (t) => {
     const snap = await t.get(saleRef(saleId));
     if (!snap.exists()) throw new Error('Sale not found');
@@ -207,6 +303,31 @@ export async function markUpiFailed(saleId: string, reason: string, actor: UserP
  * Financial record is NEVER deleted — only flagged.
  */
 export async function refundSale(saleId: string, note: string, actor: UserProfile): Promise<void> {
+  if (!firebaseReady) {
+    L.initLocalDb();
+    const sale = L.get<Sale & { id: string }>('sales', saleId);
+    if (!sale) throw new Error('Sale not found');
+    if (sale.refunded) throw new Error('Already refunded');
+    if (sale.paymentStatus !== 'success') throw new Error('Only successful sales can be refunded');
+    const now = Date.now();
+    if (sale.stockDeducted && !sale.stockRestored) {
+      for (const item of sale.items) {
+        const p = L.get<Product & { id: string }>('products', item.productId);
+        if (p) {
+          const after = p.stockQty + item.qty;
+          L.put('products', { ...p, stockQty: after, updatedAt: now, updatedBy: actor.name } as unknown as L.Row);
+          L.put('stock_movements', {
+            id: uid(), productId: p.id, productName: p.name, type: 'refund',
+            qtyDelta: item.qty, balanceAfter: after, refId: sale.id,
+            note: `Refund of ${sale.billNo}`, createdAt: now, createdBy: actor.name,
+          });
+        }
+      }
+    }
+    L.put('sales', { ...sale, refunded: true, refundedAt: now, refundedBy: actor.name, refundNote: note || '', paymentStatus: 'refunded', stockRestored: true } as unknown as L.Row);
+    await audit(actor, 'sale.refund', 'sales', saleId, `Refunded ${sale.billNo} — ₹${sale.total}${note ? ` (${note})` : ''}`);
+    return;
+  }
   await runTransaction(db, async (t) => {
     const snap = await t.get(saleRef(saleId));
     if (!snap.exists()) throw new Error('Sale not found');

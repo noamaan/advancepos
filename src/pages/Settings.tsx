@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { orderBy } from 'firebase/firestore';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { useSettings } from '../store/settings';
@@ -21,7 +20,7 @@ export function SettingsPage() {
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
 
-  const [auditLogs] = useCollection<AuditLog>('audit_logs', [orderBy('createdAt', 'desc')]);
+  const [auditLogs] = useCollection<AuditLog>('audit_logs', { order: [{ field: 'createdAt', dir: 'desc' }] });
   useEffect(() => setForm(live), [live]);
 
   function set<K extends keyof BusinessSettings>(k: K, v: BusinessSettings[K]) {

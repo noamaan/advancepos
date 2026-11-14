@@ -1,5 +1,7 @@
 import { collection, doc, addDoc, type Transaction } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, firebaseReady } from '../lib/firebase';
+import * as L from '../store/localdb';
+import { uid } from '../lib/format';
 import type { UserProfile } from '../types';
 
 type Actor = Pick<UserProfile, 'uid' | 'name'>;
@@ -14,9 +16,9 @@ export async function audit(
   action: string, entity: string, entityId: string, summary: string,
 ): Promise<void> {
   try {
-    await addDoc(collection(db, 'audit_logs'), {
-      ...actorOf(actor), action, entity, entityId, summary, createdAt: Date.now(),
-    });
+    const row = { ...actorOf(actor), action, entity, entityId, summary, createdAt: Date.now() };
+    if (!firebaseReady) { L.initLocalDb(); L.put('audit_logs', { id: uid(), ...row } as L.Row); return; }
+    await addDoc(collection(db, 'audit_logs'), row);
   } catch { /* audit must never break the operation it logs */ }
 }
 

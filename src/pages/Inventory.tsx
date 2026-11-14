@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from 'react';
-import { orderBy } from 'firebase/firestore';
 import { useCollection } from '../hooks/fs';
 import { useAuth } from '../store/auth';
 import { useSettings } from '../store/settings';
@@ -19,8 +18,8 @@ export function Inventory() {
   const { profile, can } = useAuth();
   const { settings } = useSettings();
   const toast = useToast();
-  const [products] = useCollection<Product>('products', [orderBy('name')]);
-  const [movements] = useCollection<StockMovement>('stock_movements', [orderBy('createdAt', 'desc')]);
+  const [products] = useCollection<Product>('products', { order: [{ field: 'name', dir: 'asc' }] });
+  const [movements] = useCollection<StockMovement>('stock_movements', { order: [{ field: 'createdAt', dir: 'desc' }] });
 
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('All');
