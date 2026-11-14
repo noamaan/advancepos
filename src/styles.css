@@ -19,7 +19,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 h1,h2,h3,h4 { margin: .2em 0; }
-.muted { color: var(--muted); } .small { font-size: .8rem; }
+.muted { color: var(--muted); } .small { font-size: .8rem; } .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
 .center { text-align: center; } .pad { padding: 16px; } .pad-sm { padding: 10px 14px; }
 .grow { flex: 1; } .neg { color: var(--bad); } .pos { color: var(--ok); }
 

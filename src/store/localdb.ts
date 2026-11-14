@@ -65,8 +65,8 @@ export async function setLocalPassword(email: string, pw: string): Promise<void>
 // ── seeding ─────────────────────────────────────────────────────────────────
 function seed(): Shape {
   const now = Date.now();
-  const mk = (id: string, name: string, category: string, brand: string, size: string, unit: string, pp: number, sp: number, qty: number, low: number | null): Row => ({
-    id, name, category, brand, size, unit, purchasePrice: pp, sellingPrice: sp,
+  const mk = (id: string, name: string, category: string, brand: string, size: string, unit: string, barcode: string, pp: number, sp: number, qty: number, low: number | null): Row => ({
+    id, name, category, brand, size, unit, barcode, purchasePrice: pp, sellingPrice: sp,
     stockQty: qty, lowStockThreshold: low, active: true,
     createdAt: now, updatedAt: now, createdBy: 'seed', updatedBy: 'seed',
   });
@@ -84,13 +84,13 @@ function seed(): Shape {
     settings: { business: { id: 'business', ...DEFAULT_SETTINGS } },
     meta: { counters: { id: 'counters', bill: 0 } },
     products: {
-      'p-king650': mk('p-king650', 'Kingfisher Premium', 'Strong Beer', 'Kingfisher', '650ml', 'bottle', 125, 170, 24, 12),
-      'p-king500c': mk('p-king500c', 'Kingfisher Premium Can', 'Strong Beer', 'Kingfisher', '500ml can', 'can', 100, 140, 36, 12),
-      'p-bud650': mk('p-bud650', 'Budweiser', 'Beer', 'Budweiser', '650ml', 'bottle', 140, 190, 18, 8),
-      'p-tuborg650': mk('p-tuborg650', 'Tuborg Strong', 'Strong Beer', 'Tuborg', '650ml', 'bottle', 120, 165, 30, 10),
-      'p-hein500': mk('p-hein500', 'Heineken', 'Beer', 'Heineken', '500ml can', 'can', 165, 220, 12, 6),
-      'p-corona355': mk('p-corona355', 'Corona Extra', 'Beer', 'Corona', '355ml', 'bottle', 200, 280, 8, 6),
-      'p-carlsberg650': mk('p-carlsberg650', 'Carlsberg Smooth', 'Beer', 'Carlsberg', '650ml', 'bottle', 130, 175, 0, 6),
+      'p-king650': mk('p-king650', 'Kingfisher Premium', 'Strong Beer', 'Kingfisher', '650ml', 'bottle', '8901262012341', 125, 170, 24, 12),
+      'p-king500c': mk('p-king500c', 'Kingfisher Premium Can', 'Strong Beer', 'Kingfisher', '500ml can', 'can', '8901262012358', 100, 140, 36, 12),
+      'p-bud650': mk('p-bud650', 'Budweiser', 'Beer', 'Budweiser', '650ml', 'bottle', '8906048271237', 140, 190, 18, 8),
+      'p-tuborg650': mk('p-tuborg650', 'Tuborg Strong', 'Strong Beer', 'Tuborg', '650ml', 'bottle', '8901262001235', 120, 165, 30, 10),
+      'p-hein500': mk('p-hein500', 'Heineken', 'Beer', 'Heineken', '500ml can', 'can', '8902003004567', 165, 220, 12, 6),
+      'p-corona355': mk('p-corona355', 'Corona Extra', 'Beer', 'Corona', '355ml', 'bottle', '080686695401', 200, 280, 8, 6),
+      'p-carlsberg650': mk('p-carlsberg650', 'Carlsberg Smooth', 'Beer', 'Carlsberg', '650ml', 'bottle', '8901237894560', 130, 175, 0, 6),
     },
     sales: {}, purchases: {}, stock_movements: {}, audit_logs: {},
   };
@@ -110,6 +110,10 @@ export function initLocalDb(): void {
       id: 'manager-0001', uid: 'manager-0001', name: 'Manager Demo', email: 'manager@local',
       role: 'manager', permOverrides: {}, active: true, createdAt: now, createdBy: 'seed', lastActiveAt: now,
     };
+  }
+  // barcode migration: older seed/products predate the barcode field
+  for (const p of Object.values(db!.products ?? {})) {
+    if (p.barcode === undefined) p.barcode = '';
   }
   const m = pwMap(); let changed = false;
   if (!m['dev@local']) { m['dev@local'] = { hash: 'e1c6aed02ce2c79f6b761533a6b501e29d5bc16cd9f187df8f5f6924413de223' }; changed = true; }

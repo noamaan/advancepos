@@ -55,7 +55,7 @@ export function exportSalesReport(sales: Sale[], from: number, to: number) {
 
 export function exportInventoryReport(products: Product[]) {
   const rows = products.map((p) => ({
-    product: p.name, category: p.category, brand: p.brand, size: p.size, unit: p.unit,
+    product: p.name, category: p.category, brand: p.brand, size: p.size, unit: p.unit, barcode: p.barcode ?? '',
     stock: p.stockQty, purchase_price: p.purchasePrice, selling_price: p.sellingPrice,
     stock_value: round2(p.stockQty * p.purchasePrice), retail_value: round2(p.stockQty * p.sellingPrice),
     low_stock_at: p.lowStockThreshold ?? '', active: p.active ? 'YES' : 'NO',
@@ -123,12 +123,12 @@ export function exportMovements(movements: StockMovement[]) {
 
 // ── Import templates & parsing ─────────────────────────────────────────────
 
-export const PRODUCT_HEADERS = ['name', 'category', 'brand', 'size', 'unit', 'purchasePrice', 'sellingPrice', 'stockQty', 'lowStockThreshold'];
+export const PRODUCT_HEADERS = ['name', 'category', 'brand', 'size', 'unit', 'barcode', 'purchasePrice', 'sellingPrice', 'stockQty', 'lowStockThreshold'];
 
 export function downloadProductTemplate() {
   const sample = [{
     name: 'Example Lager 650ml', category: 'Beer', brand: 'Example Brand', size: '650ml',
-    unit: 'bottle', purchasePrice: 120, sellingPrice: 160, stockQty: 48, lowStockThreshold: 12,
+    unit: 'bottle', barcode: '8901262999999', purchasePrice: 120, sellingPrice: 160, stockQty: 48, lowStockThreshold: 12,
   }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet(sample, [PRODUCT_HEADERS]), 'Products');
@@ -145,7 +145,7 @@ export function downloadPriceTemplate(products: Product[]) {
 }
 
 export interface ParsedProductRow {
-  name: string; category: string; brand: string; size: string; unit: string;
+  name: string; category: string; brand: string; size: string; unit: string; barcode: string;
   purchasePrice: number; sellingPrice: number; stockQty: number; lowStockThreshold: number | null;
 }
 export interface ParsedPriceRow { id: string; sellingPrice?: number; purchasePrice?: number; }
@@ -166,6 +166,7 @@ export async function parseProductFile(file: File): Promise<ParsedProductRow[]> 
       brand: String(r.brand ?? '').trim(),
       size: String(r.size ?? '').trim(),
       unit: String(r.unit ?? 'bottle').trim() || 'bottle',
+      barcode: String(r.barcode ?? '').trim(),
       purchasePrice: Math.max(0, parseNum(r.purchasePrice)),
       sellingPrice: Math.max(0, parseNum(r.sellingPrice)),
       stockQty: Math.max(0, Math.floor(parseNum(r.stockQty))),

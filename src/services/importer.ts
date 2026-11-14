@@ -24,12 +24,12 @@ export async function importProducts(rows: ParsedProductRow[], actor: UserProfil
       const key = `${r.name.toLowerCase()}|${r.size.toLowerCase()}|${r.brand.toLowerCase()}`;
       const hit = existing.get(key);
       if (hit) {
-        L.put('products', { ...hit, category: r.category, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice, lowStockThreshold: r.lowStockThreshold, active: true, updatedAt: now, updatedBy: actor.name, ...(r.stockQty !== hit.stockQty ? { stockQty: r.stockQty } : {}) } as unknown as L.Row);
+        L.put('products', { ...hit, category: r.category, barcode: r.barcode, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice, lowStockThreshold: r.lowStockThreshold, active: true, updatedAt: now, updatedBy: actor.name, ...(r.stockQty !== hit.stockQty ? { stockQty: r.stockQty } : {}) } as unknown as L.Row);
         if (r.stockQty !== hit.stockQty) L.put('stock_movements', { id: uid(), productId: hit.id, productName: hit.name, type: 'import', qtyDelta: r.stockQty - hit.stockQty, balanceAfter: r.stockQty, refId: `import-${now}`, note: 'Bulk import stock sync', createdAt: now, createdBy: actor.name });
         updated += 1;
       } else {
         const id = uid();
-        const p = { id, name: r.name, category: r.category, brand: r.brand, size: r.size, unit: r.unit, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice, stockQty: r.stockQty, lowStockThreshold: r.lowStockThreshold, active: true, createdAt: now, updatedAt: now, createdBy: actor.name, updatedBy: actor.name };
+        const p = { id, name: r.name, category: r.category, brand: r.brand, size: r.size, unit: r.unit, barcode: r.barcode, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice, stockQty: r.stockQty, lowStockThreshold: r.lowStockThreshold, active: true, createdAt: now, updatedAt: now, createdBy: actor.name, updatedBy: actor.name };
         L.put('products', p as unknown as L.Row);
         if (r.stockQty > 0) L.put('stock_movements', { id: uid(), productId: id, productName: r.name, type: 'import', qtyDelta: r.stockQty, balanceAfter: r.stockQty, refId: `import-${now}`, note: 'Opening stock (import)', createdAt: now, createdBy: actor.name });
         existing.set(key, p as unknown as Product & { id: string });
@@ -54,7 +54,7 @@ export async function importProducts(rows: ParsedProductRow[], actor: UserProfil
       if (hit) {
         const delta = r.stockQty - hit.p.stockQty;
         batch.update(doc(db, 'products', hit.id), {
-          category: r.category, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice,
+          category: r.category, barcode: r.barcode, purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice,
           lowStockThreshold: r.lowStockThreshold, stockQty: r.stockQty, active: true,
           updatedAt: now, updatedBy: actor.name,
         });
@@ -69,7 +69,7 @@ export async function importProducts(rows: ParsedProductRow[], actor: UserProfil
       } else {
         const id = uid();
         batch.set(doc(db, 'products', id), {
-          id, name: r.name, category: r.category, brand: r.brand, size: r.size, unit: r.unit,
+          id, name: r.name, category: r.category, brand: r.brand, size: r.size, unit: r.unit, barcode: r.barcode,
           purchasePrice: r.purchasePrice, sellingPrice: r.sellingPrice,
           stockQty: r.stockQty, lowStockThreshold: r.lowStockThreshold, active: true,
           createdAt: now, updatedAt: now, createdBy: actor.name, updatedBy: actor.name,

@@ -30,13 +30,80 @@ export function POS() {
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
+  // ── barcode scanner support ──────────────────────────────────────────────
+  // USB/Bluetooth scanners act as keyboards: rapid digits then Enter.
+  const scanBuf = useRef<{ s: string; last: number }>({ s: '', last: 0 });
+
+  function beep(ok: boolean) {
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = ok ? 880 : 220; o.type = ok ? 'sine' : 'square';
+      g.gain.setValueAtTime(0.08, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (ok ? 0.12 : 0.35));
+      o.start(); o.stop(ctx.currentTime + (ok ? 0.12 : 0.35));
+      o.onended = () => void ctx.close();
+    } catch { /* audio blocked — ignore */ }
+  }
+
+  function handleScannedCode(code: string) {
+    const hit = products.find((p) => p.barcode === code && p.active !== false);
+    if (hit) {
+      addToCart(hit);
+      beep(true);
+      toast('ok', `➕ ${hit.name} added (scanned ${code})`);
+    } else {
+      beep(false);
+      toast('err', `Unknown barcode "${code}". Add it to a product in Inventory (open the product → Barcode field → scan).`);
+    }
+    setSearch('');
+    searchRef.current?.focus();
+  }
+
+  // Enter in the search box: exact barcode → add. Otherwise stays a text search.
+  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    const code = search.trim();
+    if (code.length >= 6 && /^[0-9A-Za-z-]+$/.test(code)) handleScannedCode(code);
+  }
+
+  // Safety net: scan bursts while no input is focused (e.g. after tapping tiles).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return; // inputs handle themselves
+      const now = performance.now();
+      if (e.key === 'Enter') {
+        const { s, last } = scanBuf.current;
+        scanBuf.current = { s: '', last: 0 };
+        if (s.length >= 6 && now - last < 150) {
+          e.preventDefault();
+          handleScannedCode(s);
+        }
+        return;
+      }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (now - scanBuf.current.last > 150) scanBuf.current.s = '';
+        scanBuf.current.s = (scanBuf.current.s + e.key).slice(-24);
+        scanBuf.current.last = now;
+      } else {
+        scanBuf.current.s = '';
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+
   const activeProducts = useMemo(() => products.filter((p) => p.active !== false), [products]);
   const categories = useMemo(() => ['All', ...Array.from(new Set(activeProducts.map((p) => p.category))).sort()], [activeProducts]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeProducts.filter((p) =>
       (cat === 'All' || p.category === cat) &&
-      (!q || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.size.toLowerCase().includes(q)));
+      (!q || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q)
+        || p.size.toLowerCase().includes(q) || (p.barcode ?? '').toLowerCase().includes(q)));
   }, [activeProducts, search, cat]);
 
   const totals = useMemo(() => computeTotals(cart, billDiscount, settings.taxRate), [cart, billDiscount, settings.taxRate]);
@@ -55,6 +122,8 @@ export function POS() {
       }
       return [...c, { product: p, qty: 1, discount: 0 }];
     });
+    // scanner-friendly: keep the search/scan box focused when using a keyboard
+    if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) searchRef.current?.focus();
   }
   const setQty = (id: string, qty: number) => setCart((c) => c.map((l) => l.product.id === id ? { ...l, qty: Math.max(1, Math.min(Math.floor(qty) || 1, l.product.stockQty)) } : l));
   const setLineDisc = (id: string, d: number) => setCart((c) => c.map((l) => l.product.id === id ? { ...l, discount: Math.max(0, Math.min(d, round2(l.product.sellingPrice * l.qty))) } : l));
@@ -122,7 +191,8 @@ export function POS() {
     <div className="pos-grid">
       <section className="pos-left card">
         <div className="pos-search-row">
-          <input ref={searchRef} className="input" placeholder="🔍 Search name, brand or size…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input ref={searchRef} className="input" placeholder="🔍 Search or scan barcode…" value={search}
+            onChange={(e) => setSearch(e.target.value)} onKeyDown={onSearchKey} inputMode="search" />
         </div>
         <div className="chip-row">
           {categories.map((c) => <button key={c} className={`chip ${cat === c ? 'chip-on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}

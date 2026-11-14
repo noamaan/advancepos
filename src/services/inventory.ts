@@ -1,5 +1,5 @@
 import {
-  collection, doc, runTransaction, serverTimestamp, deleteField,
+  collection, doc, getDocs, limit, query, runTransaction, serverTimestamp, deleteField, where,
 } from 'firebase/firestore';
 import { db, firebaseReady } from '../lib/firebase';
 import * as L from '../store/localdb';
@@ -8,6 +8,21 @@ import type { Product, Purchase, UserProfile, MovementType } from '../types';
 import { audit, auditTx } from './audit';
 
 const Lb = () => { L.initLocalDb(); };
+
+/** Throw if another (active) product already uses this barcode. */
+async function assertBarcodeFree(barcode: string, excludeId?: string): Promise<void> {
+  const code = barcode.trim();
+  if (!code) return;
+  if (!firebaseReady) {
+    Lb();
+    const hit = L.list<Product & { id: string }>('products').find((p) => p.barcode === code && p.id !== excludeId && p.active);
+    if (hit) throw new Error(`Barcode ${code} already belongs to "${hit.name}"`);
+    return;
+  }
+  const dup = await getDocs(query(collection(db, 'products'), where('barcode', '==', code), limit(5)));
+  const other = dup.docs.find((d) => d.id !== excludeId);
+  if (other) throw new Error(`Barcode ${code} already belongs to "${(other.data() as Product).name}"`);
+}
 
 export type ProductInput = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy' | 'stockQty'>
   & { stockQty?: number };
@@ -18,13 +33,14 @@ const zero = (n: number) => round2(Math.max(0, n));
 /** Create a product. Opening stock is written via a movement for traceability. */
 export async function createProduct(input: ProductInput, actor: UserProfile): Promise<string> {
   const id = uid();
+  await assertBarcodeFree(input.barcode ?? '');
   if (!firebaseReady) {
     Lb();
     const now = Date.now();
     const opening = Math.max(0, Math.floor(input.stockQty ?? 0));
     const p: Product = {
       id, name: input.name.trim(), category: input.category.trim(), brand: input.brand.trim(),
-      size: input.size.trim(), unit: input.unit.trim() || 'bottle',
+      size: input.size.trim(), unit: input.unit.trim() || 'bottle', barcode: (input.barcode ?? '').trim(),
       purchasePrice: zero(input.purchasePrice), sellingPrice: zero(input.sellingPrice),
       stockQty: opening, lowStockThreshold: input.lowStockThreshold, active: input.active,
       createdAt: now, updatedAt: now, createdBy: actor.name, updatedBy: actor.name,
@@ -50,6 +66,7 @@ export async function createProduct(input: ProductInput, actor: UserProfile): Pr
       brand: input.brand.trim(),
       size: input.size.trim(),
       unit: input.unit.trim() || 'bottle',
+      barcode: (input.barcode ?? '').trim(),
       purchasePrice: zero(input.purchasePrice),
       sellingPrice: zero(input.sellingPrice),
       stockQty: opening,
@@ -73,6 +90,7 @@ export async function createProduct(input: ProductInput, actor: UserProfile): Pr
 
 /** Edit product details (not stock — use adjustStock / recordPurchase for that). */
 export async function updateProduct(id: string, patch: Partial<ProductInput>, actor: UserProfile): Promise<void> {
+  if (patch.barcode !== undefined) await assertBarcodeFree(patch.barcode ?? '', id);
   if (!firebaseReady) {
     Lb();
     const cur = L.get<Product & { id: string }>('products', id);
@@ -84,6 +102,7 @@ export async function updateProduct(id: string, patch: Partial<ProductInput>, ac
       ...(patch.brand !== undefined ? { brand: patch.brand.trim() } : {}),
       ...(patch.size !== undefined ? { size: patch.size.trim() } : {}),
       ...(patch.unit !== undefined ? { unit: patch.unit.trim() || 'bottle' } : {}),
+      ...(patch.barcode !== undefined ? { barcode: patch.barcode.trim() } : {}),
       ...(patch.purchasePrice !== undefined ? { purchasePrice: zero(patch.purchasePrice) } : {}),
       ...(patch.sellingPrice !== undefined ? { sellingPrice: zero(patch.sellingPrice) } : {}),
       ...(patch.active !== undefined ? { active: patch.active } : {}),
@@ -103,6 +122,7 @@ export async function updateProduct(id: string, patch: Partial<ProductInput>, ac
     if (patch.brand !== undefined) next.brand = patch.brand.trim();
     if (patch.size !== undefined) next.size = patch.size.trim();
     if (patch.unit !== undefined) next.unit = patch.unit.trim() || 'bottle';
+    if (patch.barcode !== undefined) next.barcode = patch.barcode.trim();
     if (patch.purchasePrice !== undefined) next.purchasePrice = zero(patch.purchasePrice);
     if (patch.sellingPrice !== undefined) next.sellingPrice = zero(patch.sellingPrice);
     if (patch.active !== undefined) next.active = patch.active;

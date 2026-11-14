@@ -10,7 +10,7 @@ import { fmtDateTime, inr } from '../lib/format';
 import type { Product, StockMovement } from '../types';
 
 const EMPTY: ProductInput = {
-  name: '', category: '', brand: '', size: '', unit: 'bottle',
+  name: '', category: '', brand: '', size: '', unit: 'bottle', barcode: '',
   purchasePrice: 0, sellingPrice: 0, stockQty: 0, lowStockThreshold: null, active: true,
 };
 
@@ -56,7 +56,7 @@ export function Inventory() {
   function openForm(p?: Product) {
     if (p) {
       setEditingId(p.id); setAdding(false);
-      setForm({ name: p.name, category: p.category, brand: p.brand, size: p.size, unit: p.unit, purchasePrice: p.purchasePrice, sellingPrice: p.sellingPrice, lowStockThreshold: p.lowStockThreshold, active: p.active });
+      setForm({ name: p.name, category: p.category, brand: p.brand, size: p.size, unit: p.unit, barcode: p.barcode ?? '', purchasePrice: p.purchasePrice, sellingPrice: p.sellingPrice, lowStockThreshold: p.lowStockThreshold, active: p.active });
     } else { setEditingId(null); setAdding(true); setForm({ ...EMPTY, category: settings.categories[0] ?? '' }); }
   }
   function closeForm() { setEditingId(null); setAdding(false); setForm(EMPTY); }
@@ -137,7 +137,7 @@ export function Inventory() {
       <div className="card table-card">
         <table className="table">
           <thead><tr>
-            <th>Product</th><th>Category</th><th>Size</th>{can('viewCost') && <th className="num">Cost</th>}<th className="num">Price</th><th className="num">Stock</th><th className="num">Low at</th>{(canManage || canAdjust) && <th></th>}
+            <th>Product</th><th>Category</th><th>Size</th><th>Barcode</th>{can('viewCost') && <th className="num">Cost</th>}<th className="num">Price</th><th className="num">Stock</th><th className="num">Low at</th>{(canManage || canAdjust) && <th></th>}
           </tr></thead>
           <tbody>
             {filtered.map((p) => {
@@ -147,6 +147,7 @@ export function Inventory() {
                   <td><b>{p.name}</b>{p.brand && <div className="muted small">{p.brand}</div>}</td>
                   <td>{p.category}</td>
                   <td>{p.size || '—'}</td>
+                  <td className="small" style={{ fontFamily: 'monospace' }}>{p.barcode || '—'}</td>
                   {can('viewCost') && <td className="num">{inr(p.purchasePrice)}</td>}
                   <td className="num">{inr(p.sellingPrice)}</td>
                   <td className="num">{p.stockQty <= 0 ? <Badge tone="bad">0</Badge> : low ? <Badge tone="warn">{p.stockQty}</Badge> : p.stockQty} <span className="muted small">{p.unit}</span></td>
@@ -161,7 +162,7 @@ export function Inventory() {
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={9} className="muted center pad">No products here yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={10} className="muted center pad">No products here yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -177,6 +178,9 @@ export function Inventory() {
             <Field label="Brand"><input className="input" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></Field>
             <Field label="Size"><input className="input" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} placeholder="650ml / 500ml can" /></Field>
             <Field label="Unit"><input className="input" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="bottle" /></Field>
+            <Field label="Barcode" hint="Click this box and scan the pack — the scanner types it for you">
+              <input className="input mono" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} placeholder="e.g. 8901262012341" />
+            </Field>
             <Field label="Purchase price (₹)"><input className="input" type="number" min={0} step="0.01" value={form.purchasePrice || ''} onChange={(e) => setForm({ ...form, purchasePrice: Number(e.target.value) || 0 })} /></Field>
             <Field label="Selling price (₹)"><input className="input" type="number" min={0} step="0.01" value={form.sellingPrice || ''} onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) || 0 })} /></Field>
             <Field label={`Low-stock alert at (blank = shop default ${settings.lowStockDefault})`}>

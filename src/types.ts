@@ -22,6 +22,7 @@ export interface Product {
   brand: string;
   size: string; // e.g. "650ml", "500ml can"
   unit: string; // e.g. "bottle", "can", "crate"
+  barcode: string; // EAN-13/UPC/Code128 printed on the pack — scanned at billing
   purchasePrice: number;
   sellingPrice: number;
   stockQty: number;
